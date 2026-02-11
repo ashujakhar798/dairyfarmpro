@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+
+    <!-- PWA: viewport already correct -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Dairy Farm Pro - Business Manager</title>
+
+    <!-- PWA: Theme color (top bar color in app) -->
+    <meta name="theme-color" content="#2c3e50">
+
+    <!-- PWA: App description -->
+    <meta name="description" content="Dairy Farm Pro - Complete dairy business management system">
+
+    <!-- PWA: Manifest file -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- PWA: iOS support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Dairy Farm Pro">
+
+    <!-- PWA: App icons -->
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <!-- Chart JS -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- PWA: Service Worker registration -->
+    <script>
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("sw.js")
+                    .then(reg => console.log("Service Worker registered", reg))
+                    .catch(err => console.log("Service Worker failed", err));
+            });
+        }
+    </script>
+
+    <style>
+        :root { --primary: #2c3e50; --secondary: #27ae60; --light: #f4f7f6; --accent: #01579b; --highlight: #fff9c4; --whatsapp: #25D366; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--light); margin: 0; padding: 10px; font-size: 14px; }
+        h1 { text-align: center; color: var(--primary); border-bottom: 4px solid var(--secondary); padding-bottom: 10px; margin: 10px 0; font-size: 24px; }
+
+        /* --- REST OF YOUR CSS UNCHANGED --- */
+    </style>
+</head>
+<body>
+
+    <h1 class="no-print">DAIRY FARM PRO</h1>
+
+    <div class="tabs no-print">
+        <button class="tab-btn active" onclick="showTab(event, 'customers')">1. Customers</button>
+        <button class="tab-btn" onclick="showTab(event, 'animals')">2. Animals</button>
+        <button class="tab-btn" onclick="showTab(event, 'expenditure')">3. Expenditure</button>
+        <button class="tab-btn" onclick="showTab(event, 'analysis')">4. Analysis & Backup</button>
+    </div>
+
+    <div id="customerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close-modal no-print" onclick="closeModal('customerModal')">&times;</span>
+                <h2 id="mNameDisplay">CUSTOMER</h2>
+            </div>
+            <div id="modalPrintArea" class="modal-body">
+                <div class="edit-area">
+                    <div class="edit-group"><label>Name</label><input type="text" id="mEditName"></div>
+                    <div class="edit-group"><label>Phone / Address</label><input type="text" id="mEditInfo"></div>
+                </div>
+                <h4 style="text-align:center; color:#0277bd; margin:10px 0;">Milk Calendar (Liters)</h4>
+                <div id="mCalendar" class="cal-grid"></div>
+                <div class="summary-box">
+                    <div>Total: <b id="mTotalMilk">0</b> L</div>
+                    <div>Cost: ₹ <b id="mTotalCost">0</b></div>
+                    <div>Due: ₹ <b id="mRemaining" style="color:#ff8a80">0</b></div>
+                </div>
+            </div>
+            <div class="modal-footer no-print">
+                <button class="btn btn-save" onclick="saveCustomerChanges()">Save & Update</button>
+                <button class="btn btn-print" onclick="printReceipt()">Print Receipt</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="waBulkModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close-modal" onclick="closeModal('waBulkModal')">&times;</span>
+                <h2>📢 Send Bills via WhatsApp</h2>
+            </div>
+            <div class="modal-body">
+                <div style="background:#e8f5e9; padding:10px; margin-bottom:10px; border-radius:5px;">
+                    <strong>Instructions:</strong> Includes ALL previous pending dues. Click "Send" to open WhatsApp.
+                </div>
+                <div id="waListContainer" style="max-height:60vh; overflow-y:auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="photoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><span class="close-modal" onclick="closeModal('photoModal')">&times;</span><h2>📸 Gallery</h2></div>
+            <div class="modal-body">
+                <div id="galleryGrid" class="photo-grid"></div>
+                <hr>
+                <h4>Add Photo:</h4>
+                <input type="file" id="newPhotoUpload" accept="image/*" multiple>
+                <button class="btn btn-save" onclick="uploadMorePhotos()">Upload</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="imgPreviewModal" class="modal" onclick="closeImgPreview(event)">
+        <div class="modal-content">
+            <div class="modal-body" style="display:flex; justify-content:center;">
+                <img id="imgPreviewFull" src="" onclick="toggleZoom(event)">
+            </div>
+            <p style="color:white; text-align:center; position:absolute; bottom:20px; width:100%; pointer-events:none;">Tap image to Zoom • Tap outside to Close</p>
+        </div>
+    </div>
+
+    <div id="medicalModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close-modal" onclick="closeModal('medicalModal')">&times;</span>
+                <h2>💊 Medical History</h2>
+            </div>
+            <div class="modal-body">
+                <div style="background:#00695c; color:white; padding:10px; margin-bottom:10px; border-radius:5px; text-align:center;">
+                    <label><b>Select Month: </b></label>
+                    <input type="month" id="medMonthPicker" onchange="renderMedRecords()" style="padding:5px; border-radius:4px; border:none;">
+                </div>
+                <div class="edit-area" style="background:#e0f2f1;">
+                    <div class="edit-group" style="flex:2;">
+                        <label>Treatment Details (Paragraph)</label>
+                        <textarea id="medName" placeholder="Enter detailed treatment info..." oninput="autoResize(this)"></textarea>
+                    </div>
+                    <div class="edit-group" style="flex:1;">
+                        <label>Cost ₹</label>
+                        <input type="number" id="medCost">
+                        <label style="margin-top:5px;">Photos (Multiple)</label>
+                        <input type="file" id="medPhoto" accept="image/*" multiple>
+                    </div>
+                    <div style="width:100%; text-align:right;">
+                        <button class="btn btn-add" style="width:auto;" onclick="addMedicalRecord()">+ Add Record</button>
+                    </div>
+                </div>
+                <table class="med-table">
+                    <thead><tr><th style="width:15%">Date</th><th style="width:40%">Treatment Description</th><th style="width:15%">Cost</th><th style="width:20%">Photos</th><th style="width:10%">Action</th></tr></thead>
+                    <tbody id="medicalTableBody"></tbody>
+                </table>
+                <div class="med-total-box">Month Total: ₹<span id="medGrandTotal">0.00</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="customers" class="tab-content active-content">
+        <div class="controls-row no-print">
+            <div style="flex:1"><label><b>Month: </b></label><input type="month" id="dataMonth" onchange="loadMonthlyData()" style="padding:8px; border:1px solid #ccc; border-radius:5px; width:100%;"></div>
+            <div class="search-container"><input type="text" id="custSearch" class="search-input" placeholder="🔍 Search..." onkeyup="searchAndSort()"></div>
+            <button class="btn btn-print" onclick="printTableRecord()">Print All</button>
+        </div>
+        <div class="controls-row no-print" style="background:#e8f5e9; border:1px dashed #2ecc71;">
+            <div style="flex:1">
+                <label><b>UPI ID (for payments): </b></label>
+                <input type="text" id="shopUpiId" placeholder="e.g., 9876543210@upi" onchange="saveShopSettings()" style="padding:5px; border-radius:4px; border:1px solid #ccc; width:200px;">
+            </div>
+            <button class="btn btn-wa" onclick="openBulkWaModal()">📢 Send All Bills</button>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead><tr><th rowspan="2" class="sticky-col">Name</th><th rowspan="2">Info</th><th id="dateHeaderMain">Dates</th><th rowspan="2">Total</th><th rowspan="2">Rate</th><th rowspan="2">Amt</th><th rowspan="2">Paid</th><th rowspan="2">Due</th><th rowspan="2" class="no-print">Actions</th></tr><tr id="dateNumberRow"></tr></thead>
+                <tbody id="customerBody"></tbody>
+                <tfoot><tr class="footer-row"><td colspan="2" class="sticky-col">Total:</td><td id="footerSpacer"></td><td><span id="grandMilk">0</span></td><td>-</td><td>₹<span id="grandTotal">0</span></td><td>₹<span id="grandPaid">0</span></td><td>₹<span id="grandDue">0</span></td><td class="no-print"></td></tr></tfoot>
+            </table>
+        </div>
+        <button class="btn btn-add no-print" onclick="addNewCustomerRow()" style="margin-top:10px; width:100%">+ New Customer</button>
+    </div>
+
+    <div id="animals" class="tab-content">
+        <div class="no-print" style="background:#eee; padding:15px; border-radius:10px; margin-bottom:15px;">
+            <h3>Add New Animal</h3>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <input type="text" id="anId" placeholder="ID/Name" style="padding:8px; flex:1;">
+                <select id="anType" style="padding:8px;"><option>Cow</option><option>Buffalo</option></select>
+                <input type="number" id="anPrice" placeholder="Price" style="padding:8px; width:100px;">
+                <input type="date" id="anDate" style="padding:8px;">
+                <input type="text" id="anAddress" placeholder="From" style="padding:8px; flex:1;">
+                <input type="file" id="anPhotos" multiple accept="image/*">
+                <button class="btn btn-add" onclick="saveAnimal()">Save</button>
+            </div>
+        </div>
+        <div class="table-container">
+            <table style="min-width: 1200px;">
+                <thead><tr><th>Photos</th><th>ID/Name</th><th>Type</th><th>Price</th><th>Date</th><th>From</th><th>Medical</th><th style="width:30%">Description (Paragraph)</th><th class="no-print">X</th></tr></thead>
+                <tbody id="animalBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="expenditure" class="tab-content">
+        <div class="controls-row no-print" style="justify-content:center; background:#546e7a; color:white;">
+            <label style="font-size:16px;"><b>Select Month: </b></label>
+            <input type="month" id="expMonth" onchange="loadExpenditureData()" style="padding:8px; border-radius:5px; border:none; margin-left:10px;">
+            <button class="btn btn-print" onclick="window.print()" style="margin-left:20px;">Print</button>
+        </div>
+        <div class="table-container">
+            <table class="exp-table">
+                <tr><th>Animal Expenditure Description<br><small>(Feed, Maintenance, Labor etc.)</small></th><td><b>Cost (₹)</b></td></tr>
+                <tr><td><textarea id="expFeedDesc" class="exp-textarea" placeholder="Enter details..." oninput="saveExpenditureData()"></textarea></td><td><input type="number" id="expFeedCost" class="exp-cost-input" placeholder="0" oninput="saveExpenditureData()"></td></tr>
+                
+                <tr><th>Medical Expenditure Description<br><small>(General Farm Medical)</small></th><td><b>Cost (₹)</b></td></tr>
+                <tr><td><textarea id="expMedDesc" class="exp-textarea" placeholder="Enter details..." oninput="saveExpenditureData()"></textarea></td><td><input type="number" id="expMedCost" class="exp-cost-input" placeholder="0" oninput="saveExpenditureData()"></td></tr>
+                
+                <tr><th>Other Expenditure Description<br><small>(Transport, Electricity, Misc.)</small></th><td><b>Cost (₹)</b></td></tr>
+                <tr><td><textarea id="expOtherDesc" class="exp-textarea" placeholder="Enter details..." oninput="saveExpenditureData()"></textarea></td><td><input type="number" id="expOtherCost" class="exp-cost-input" placeholder="0" oninput="saveExpenditureData()"></td></tr>
+                
+                <tr>
+                    <th style="background:#5e35b1;">
+                        New Animal Purchase / Investment<br>
+                        <small>(Breed, Source, Details)</small>
+                    </th>
+                    <td><b>Cost (₹)</b></td>
+                </tr>
+                <tr>
+                    <td><textarea id="expNewAnimalDesc" class="exp-textarea" placeholder="Enter new animal details..." oninput="saveExpenditureData()"></textarea></td>
+                    <td><input type="number" id="expNewAnimalCost" class="exp-cost-input" placeholder="0" oninput="saveExpenditureData()"></td>
+                </tr>
+
+                <tr style="background:#fff3e0;">
+                    <th style="background:#ff9800; color:white;">Monthly Medical Total (From Animals Tab)</th>
+                    <td style="font-weight:bold; font-size:16px;">₹ <span id="expAutoMedTotal">0</span></td>
+                </tr>
+
+                <tr class="exp-total-row"><td style="text-align:right; padding-right:20px;">TOTAL EXPENDITURE MADE:</td><td style="text-align:right;">₹ <span id="expTotalCalc">0</span></td></tr>
+                <tr><th style="background:#81c784; color:#1b5e20;">Animal Sold / Profit<br><small>(Enter details of animals sold)</small></th><td style="background:#e8f5e9;"><b>Profit (₹)</b></td></tr>
+                <tr><td><textarea id="expSoldDesc" class="exp-textarea" placeholder="Enter sold animal details..." oninput="saveExpenditureData()"></textarea></td><td><input type="number" id="expSoldCost" class="exp-cost-input" placeholder="0" oninput="saveExpenditureData()" style="color:green;"></td></tr>
+                <tr class="exp-final-row"><td style="text-align:right; padding-right:20px;">FINAL MONTHLY EXPENDITURE (Total Cost - Sold Profit):</td><td style="text-align:right;">₹ <span id="expFinalCalc">0</span></td></tr>
+            </table>
+        </div>
+    </div>
+
+    <div id="analysis" class="tab-content">
+        <div class="analysis-controls no-print" style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+            <h2>📈 Business Analytics</h2>
+            <div><input type="month" id="analysisMonth" onchange="runAnalysis()" style="padding:10px; border:1px solid #ccc; border-radius:5px;"><button class="btn btn-print" onclick="window.print()">Print Report</button></div>
+        </div>
+        <div id="analysisArea">
+            <div class="chart-row"><div class="chart-box"><div class="chart-title">Daily Sales</div><canvas id="dailyMilkChart"></canvas></div><div class="chart-box"><div class="chart-title">Finance</div><canvas id="monthlyMoneyChart"></canvas></div></div>
+            <div class="chart-box" style="margin-top: 20px;"><div class="chart-title">Yearly Revenue</div><canvas id="yearlyChart"></canvas></div>
+            
+            <hr style="border: 2px solid #ccc; margin: 40px 0;">
+            <div class="fin-report-box">
+                <div class="fin-stat">
+                    <h3>Total Revenue (Collected)</h3>
+                    <p id="repMonthRev">₹ 0</p>
+                </div>
+                <div class="fin-stat">
+                    <h3>Total Expenditure Made</h3>
+                    <p id="repMonthExp" style="color:#e74c3c;">₹ 0</p>
+                    <small style="display:block; color:#2980b9; margin-top:5px; font-weight:bold;">Customer Dues: <span id="repMonthDue">₹ 0</span></small>
+                </div>
+                <div class="fin-stat">
+                    <h3>Monthly Profit / Loss</h3>
+                    <p id="repMonthProfit">₹ 0</p>
+                </div>
+            </div>
+
+            <div class="no-print" style="text-align:center; background:#f4f7f6; padding:15px; border-radius:10px; margin-bottom:20px; border:1px solid #ddd;">
+                <h2 style="color:#2c3e50; margin:0 0 10px 0;">📅 Full Year Financial Deep Dive</h2>
+                <label style="font-size:16px; font-weight:bold;">Select Year: </label>
+                <input type="number" id="yearlyAnalysisInput" min="2020" max="2050" value="2026" onchange="runYearlyDeepDive()" style="padding:8px; width:100px; text-align:center; border-radius:5px; border:1px solid #ccc; font-size:16px;">
+            </div>
+            <div class="chart-row">
+                <div class="chart-box"><div class="chart-title">Annual Expenditure vs Profit (Net)</div><canvas id="annualPieChart"></canvas></div>
+                <div class="chart-box" style="flex:2"><div class="chart-title">Monthly Revenue vs Expenditure</div><canvas id="annualFinChart"></canvas></div>
+            </div>
+            
+            <div class="fin-report-box" style="margin-top:20px; background:#e3f2fd; border-color:#2196f3;">
+                <div class="fin-stat">
+                    <h3>Total Yearly Revenue</h3>
+                    <p id="repYearRev" style="color:#2c3e50;">₹ 0</p>
+                    <small style="display:block; color:#2980b9; margin-top:5px; font-weight:bold;">Yearly Dues: <span id="repYearDue">₹ 0</span></small>
+                </div>
+                <div class="fin-stat">
+                    <h3>Total Yearly Net Profit</h3>
+                    <p id="repYearProfit" style="color:#27ae60;">₹ 0</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="backup-box no-print">
+            <h3>💾 Data Backup</h3>
+            <button class="btn btn-save" onclick="downloadBackup()">📥 Backup</button>
+            <input type="file" id="restoreFile" style="display:none" onchange="restoreBackup(this)">
+            <button class="btn btn-print" style="background:#8e44ad;" onclick="document.getElementById('restoreFile').click()">📤 Restore</button>
+        </div>
+    </div>
+
+    <script>
+        // --- GLOBAL VARS ---
+        let charts = {};
+        let currentCustRow = null;
+        let currentAnimalIndex = null;
+        let currentMedMapping = []; 
+
+        // --- UI FUNCTIONS ---
+        function showTab(evt, name) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active-content'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(name).classList.add('active-content');
+            evt.currentTarget.className += " active";
+            if(name === 'analysis') { runAnalysis(); runYearlyDeepDive(); }
+            if(name === 'expenditure') loadExpenditureData();
+        }
+        function closeModal(id) { document.getElementById(id).style.display = "none"; }
+        function printTableRecord() { document.body.classList.add('print-mode-table'); window.print(); document.body.classList.remove('print-mode-table'); }
+        function printReceipt() { document.body.classList.add('print-mode-receipt'); window.print(); document.body.classList.remove('print-mode-receipt'); }
+        function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+
+        // --- WHATSAPP & UPI LOGIC ---
+        function saveShopSettings() { localStorage.setItem('dairy_shop_upi', document.getElementById('shopUpiId').value); }
+        function extractPhone(infoText) { const match = infoText.match(/\b\d{10}\b/); return match ? match[0] : null; }
+        function getPreviousDues(name, currentMonthStr) {
+            let totalPrevious = 0; const currentDate = new Date(currentMonthStr + '-01'); 
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('dairy_v1_')) {
+                    const keyDateStr = key.replace('dairy_v1_', ''); const keyDate = new Date(keyDateStr + '-01');
+                    if (keyDate < currentDate) { 
+                        const monthData = JSON.parse(localStorage.getItem(key)) || [];
+                        const customer = monthData.find(c => c.name === name);
+                        if (customer) { let milk = customer.dates.reduce((a, b) => a + (parseFloat(b) || 0), 0); let cost = milk * (parseFloat(customer.price) || 0); let paid = parseFloat(customer.paid) || 0; totalPrevious += (cost - paid); }
+                    }
+                }
+            } return totalPrevious;
+        }
+        function generateWaLink(phone, name, milk, currentAmount, currentDue, prevDue, month) {
+            const upiId = localStorage.getItem('dairy_shop_upi'); if(!phone.startsWith('91')) phone = '91' + phone;
+            const totalPayable = parseFloat(currentDue) + parseFloat(prevDue);
+            let msg = `*Dairy Bill: ${month}*%0AHello ${name},%0ATotal Milk: ${milk} L%0ACurrent Bill: ₹ ${currentAmount}%0ACurrent Due: ₹ ${currentDue}%0A*Past Pending: ₹ ${prevDue.toFixed(2)}*%0A-----------------%0A*Total Payable: ₹ ${totalPayable.toFixed(2)}*%0A`;
+            if(upiId) { msg += `-----------------%0APay via UPI: ${upiId}%0AClick to Pay: upi://pay?pa=${upiId}&pn=DairyFarm&am=${totalPayable}&cu=INR`; }
+            return `https://wa.me/${phone}?text=${msg}`;
+        }
+        function sendOneWa(btn) {
+            const row = btn.closest('tr'); const name = row.querySelector('.r-name-val').value; const info = row.querySelector('.r-info-val').value; const milk = row.querySelector('.r-milk').innerText; const amount = row.querySelector('.r-total').innerText; const due = row.querySelector('.r-due').innerText; const month = document.getElementById('dataMonth').value;
+            const phone = extractPhone(info); if(!phone) { alert("No valid 10-digit phone number found in Info box!"); return; }
+            const prevDue = getPreviousDues(name, month); const url = generateWaLink(phone, name, milk, amount, due, prevDue, month); window.open(url, '_blank');
+        }
+        function openBulkWaModal() {
+            const tbody = document.getElementById('waListContainer'); tbody.innerHTML = ''; const rows = Array.from(document.getElementById('customerBody').rows); const month = document.getElementById('dataMonth').value; let count = 0;
+            rows.forEach(row => {
+                const name = row.querySelector('.r-name-val').value; const info = row.querySelector('.r-info-val').value; const milk = row.querySelector('.r-milk').innerText; const amount = row.querySelector('.r-total').innerText; const due = row.querySelector('.r-due').innerText; const phone = extractPhone(info);
+                const prevDue = getPreviousDues(name, month); const totalPayable = parseFloat(due) + prevDue;
+                if(totalPayable > 0) { count++; let actionHtml = ''; if(phone) { const url = generateWaLink(phone, name, milk, amount, due, prevDue, month); actionHtml = `<a href="${url}" target="_blank" class="btn btn-wa" style="text-decoration:none;">🚀 Send</a>`; } else { actionHtml = `<span style="color:red; font-size:12px;">No Phone</span>`; } tbody.innerHTML += `<div class="wa-list-item"><div><strong>${name}</strong> (${phone || 'N/A'})<br><small>Cur: ₹${due} | Past: ₹${prevDue.toFixed(0)} | <b>Tot: ₹${totalPayable.toFixed(0)}</b></small></div><div>${actionHtml}</div></div>`; }
+            });
+            if(count === 0) tbody.innerHTML = "<div style='text-align:center; padding:20px;'>No pending dues found!</div>"; document.getElementById('waBulkModal').style.display = 'block';
+        }
+
+        // --- BACKUP ---
+        function downloadBackup() { const blob = new Blob([JSON.stringify(localStorage)], {type: "application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "DairyBackup.json"; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
+        function restoreBackup(input) { if(!input.files[0]) return; const reader = new FileReader(); reader.onload = function(e) { try { const data = JSON.parse(e.target.result); localStorage.clear(); for(let key in data) localStorage.setItem(key, data[key]); alert("Restored! Reloading..."); location.reload(); } catch(err) { alert("Invalid File"); } }; reader.readAsText(input.files[0]); }
+
+        // ================= TAB 1: CUSTOMER LOGIC (REWRITTEN WITHOUT MASTER) =================
+        
+        // Helper to find the immediate previous month relative to a specific month string (YYYY-MM)
+        function getPreviousMonth(monthStr) {
+            let [y, m] = monthStr.split('-').map(Number);
+            m--;
+            if (m === 0) { m = 12; y--; }
+            return `${y}-${String(m).padStart(2, '0')}`;
+        }
+
+        // --- NEW: UPDATE FUTURE MONTHS ONLY ---
+        function updateFutureMonths(oldName, newName, newInfo) {
+            if(!newName) return;
+            const currentMonthStr = document.getElementById('dataMonth').value;
+
+            for(let i=0; i<localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if(key.startsWith('dairy_v1_')) {
+                    const keyDateStr = key.replace('dairy_v1_', '');
+                    // Only update future existing records (Strictly Greater)
+                    // (Current month is updated by autoSave)
+                    if (keyDateStr > currentMonthStr) {
+                        let mData = JSON.parse(localStorage.getItem(key));
+                        let changed = false;
+                        
+                        let existingItem = null;
+                        if(oldName) existingItem = mData.find(item => item.name === oldName);
+
+                        if(existingItem) {
+                            // If customer exists in future, update details
+                            existingItem.name = newName;
+                            existingItem.info = newInfo;
+                            changed = true;
+                        } else {
+                            // If adding a new customer in current month, verify if they exist in future
+                            // If not, add them to future
+                            let alreadyThere = mData.find(item => item.name === newName);
+                            if (!alreadyThere) {
+                                mData.push({ name: newName, info: newInfo, dates: [], price: '', paid: '' });
+                                changed = true;
+                            }
+                        }
+                        if(changed) localStorage.setItem(key, JSON.stringify(mData));
+                    }
+                }
+            }
+        }
+
+        // --- NEW: LOAD MONTHLY DATA WITH INHERITANCE ---
+        function loadMonthlyData() {
+            const mKey = document.getElementById('dataMonth').value;
+            const days = new Date(mKey.split('-')[0], mKey.split('-')[1], 0).getDate();
+            document.getElementById('dateHeaderMain').colSpan = days;
+            document.getElementById('footerSpacer').colSpan = days;
+            const dateRow = document.getElementById('dateNumberRow');
+            dateRow.innerHTML = '';
+            for(let i=1; i<=days; i++) dateRow.innerHTML += `<th>${i}</th>`;
+            
+            let stored = JSON.parse(localStorage.getItem('dairy_v1_' + mKey));
+            
+            // If data for this month doesn't exist yet, try to copy from previous month
+            if (!stored) {
+                const prevKey = getPreviousMonth(mKey);
+                const prevData = JSON.parse(localStorage.getItem('dairy_v1_' + prevKey));
+                
+                if (prevData && prevData.length > 0) {
+                    // Copy structure from previous month but clear variable data
+                    stored = prevData.map(c => ({
+                        name: c.name,
+                        info: c.info,
+                        dates: [], // Clear milk data
+                        price: c.price, // Keep price
+                        paid: '' // Clear payments
+                    }));
+                } else {
+                    stored = []; // No previous data, start empty
+                }
+            }
+
+            const tbody = document.getElementById('customerBody');
+            tbody.innerHTML = '';
+            stored.forEach(item => buildRow(item, days));
+            if(stored.length === 0) addNewCustomerRow();
+            
+            // Save immediately to establish this month in storage
+            localStorage.setItem('dairy_v1_' + mKey, JSON.stringify(stored));
+            updateGrandTotal();
+        }
+
+        function buildRow(data, days) {
+            const tbody = document.getElementById('customerBody'); const row = tbody.insertRow(); let datesHtml = ''; for(let i=0; i<days; i++) datesHtml += `<td><input type="number" class="date-input" value="${(data.dates && data.dates[i]) ? data.dates[i] : ''}" oninput="autoSave()"></td>`;
+            row.innerHTML = `<td class="sticky-col"><span class="customer-link" onclick="openCustProfile(this)">${data.name || 'Set Name'}</span><input type="hidden" class="r-name-val" value="${data.name || ''}"></td><td><input type="text" value="${data.info || ''}" style="width:100%; border:none; text-align:center;" oninput="autoSave()" class="r-info-val"></td>${datesHtml}<td><b class="r-milk">0</b></td><td><input type="number" class="r-price" value="${data.price || ''}" style="width:50px" oninput="autoSave()"></td><td><b class="r-total">0</b></td><td><input type="number" class="r-paid" value="${data.paid || ''}" style="width:60px" oninput="autoSave()"></td><td><b class="r-due" style="color:red">0</b></td><td class="no-print"><button class="btn-wa" onclick="sendOneWa(this)">📱</button> <button onclick="deleteCustRow(this)" style="color:red; border:none; background:none; font-weight:bold;">X</button></td>`;
+            calculateRow(row);
+        }
+        function openCustProfile(el) {
+            currentCustRow = el.closest('tr'); document.getElementById('mNameDisplay').innerText = (currentCustRow.querySelector('.r-name-val').value || "CUSTOMER").toUpperCase(); document.getElementById('mEditName').value = currentCustRow.querySelector('.r-name-val').value; document.getElementById('mEditInfo').value = currentCustRow.querySelector('.r-info-val').value; document.getElementById('mTotalMilk').innerText = currentCustRow.querySelector('.r-milk').innerText; document.getElementById('mTotalCost').innerText = currentCustRow.querySelector('.r-total').innerText; document.getElementById('mRemaining').innerText = currentCustRow.querySelector('.r-due').innerText;
+            const dates = Array.from(currentCustRow.querySelectorAll('.date-input')).map(i => i.value); const cal = document.getElementById('mCalendar'); cal.innerHTML = ''; dates.forEach((qty, idx) => { cal.innerHTML += `<div class="cal-day"><strong>${idx+1}</strong><span>${qty || '-'}</span></div>`; }); document.getElementById('customerModal').style.display = "block";
+        }
+        function saveCustomerChanges() {
+            const oldName = currentCustRow.querySelector('.r-name-val').value; const newName = document.getElementById('mEditName').value; const newInfo = document.getElementById('mEditInfo').value; updateFutureMonths(oldName, newName, newInfo);
+            currentCustRow.querySelector('.r-name-val').value = newName; currentCustRow.querySelector('.customer-link').innerText = newName; currentCustRow.querySelector('.r-info-val').value = newInfo; autoSave(); closeModal('customerModal'); alert("Saved!");
+        }
+        function calculateRow(row) {
+            let totalM = 0; row.querySelectorAll('.date-input').forEach(i => totalM += Number(i.value) || 0); const p = parseFloat(row.querySelector('.r-price').value) || 0; const pd = parseFloat(row.querySelector('.r-paid').value) || 0; const tot = totalM * p;
+            row.querySelector('.r-milk').innerText = totalM; row.querySelector('.r-total').innerText = tot.toFixed(2); row.querySelector('.r-due').innerText = (tot - pd).toFixed(2);
+        }
+        function autoSave() {
+            const mKey = document.getElementById('dataMonth').value; const rows = Array.from(document.getElementById('customerBody').rows);
+            const data = rows.map(r => { calculateRow(r); return { name: r.querySelector('.r-name-val').value, info: r.querySelector('.r-info-val').value, dates: Array.from(r.querySelectorAll('.date-input')).map(i => i.value), price: r.querySelector('.r-price').value, paid: r.querySelector('.r-paid').value }; });
+            localStorage.setItem('dairy_v1_' + mKey, JSON.stringify(data)); updateGrandTotal();
+        }
+        function updateGrandTotal() {
+            let m=0, t=0, p=0, d=0; document.querySelectorAll('.r-milk').forEach(v => m += parseFloat(v.innerText) || 0); document.querySelectorAll('.r-total').forEach(v => t += parseFloat(v.innerText) || 0); document.querySelectorAll('.r-paid').forEach(v => p += parseFloat(v.value) || 0); document.querySelectorAll('.r-due').forEach(v => d += parseFloat(v.innerText) || 0);
+            document.getElementById('grandMilk').innerText = m; document.getElementById('grandTotal').innerText = t.toFixed(2); document.getElementById('grandPaid').innerText = p.toFixed(2); document.getElementById('grandDue').innerText = d.toFixed(2);
+        }
+        
+        // --- NEW: DELETE LOGIC (FUTURE ONLY) ---
+        function deleteCustRow(btn) {
+            if(confirm("Are you sure? This will delete the customer from THIS month and all FUTURE months.")) {
+                const row = btn.closest('tr');
+                const nameToDelete = row.querySelector('.r-name-val').value;
+                const currentMonthStr = document.getElementById('dataMonth').value;
+
+                // 1. Remove from DOM
+                row.remove();
+                // 2. Save Current Month
+                autoSave();
+
+                // 3. Remove from Future Months ONLY
+                for(let i=0; i<localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if(key.startsWith('dairy_v1_')) {
+                        const keyDateStr = key.replace('dairy_v1_', '');
+                        // String comparison > "2026-03" > "2026-02"
+                        if (keyDateStr > currentMonthStr) { 
+                            let mData = JSON.parse(localStorage.getItem(key));
+                            const initialLength = mData.length;
+                            mData = mData.filter(item => item.name !== nameToDelete);
+                            if(mData.length !== initialLength) {
+                                localStorage.setItem(key, JSON.stringify(mData));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function addNewCustomerRow() { const days = new Date(document.getElementById('dataMonth').value.split('-')[0], document.getElementById('dataMonth').value.split('-')[1], 0).getDate(); buildRow({dates:[]}, days); }
+        function searchAndSort() {
+            const query = document.getElementById('custSearch').value.toLowerCase(); const rows = Array.from(document.getElementById('customerBody').rows);
+            if(!query) { rows.forEach(row => row.style.backgroundColor = "transparent"); return; }
+            rows.sort((a, b) => { const nA = a.querySelector('.r-name-val').value.toLowerCase(); const nB = b.querySelector('.r-name-val').value.toLowerCase(); return nA.includes(query) && !nB.includes(query) ? -1 : 0; });
+            rows.forEach(row => { row.style.backgroundColor = row.querySelector('.r-name-val').value.toLowerCase().includes(query) ? "#fff9c4" : "transparent"; document.getElementById('customerBody').appendChild(row); });
+        }
+
+        // ================= TAB 2: ANIMAL LOGIC =================
+        let animalData = JSON.parse(localStorage.getItem('dairy_animals_v2')) || [];
+        function renderAnimals() {
+            const tbody = document.getElementById('animalBody'); tbody.innerHTML = '';
+            animalData.forEach((an, idx) => { const row = tbody.insertRow(); row.innerHTML = `<td><span class="photo-link" onclick="openPhotoModal(${idx})">📷 Photos (${an.photos ? an.photos.length : 0})</span></td><td>${an.id}</td><td>${an.type}</td><td>₹${an.price}</td><td>${an.date || '-'}</td><td>${an.address || '-'}</td><td><div class="med-icon" onclick="openMedicalModal(${idx})">💊</div></td><td><textarea class="vivran-textarea" oninput="autoResize(this)" onchange="updateAnimalDesc(${idx}, this.value)">${an.desc || ''}</textarea></td><td class="no-print"><button onclick="deleteAnimal(${idx})" style="color:red; border:none; background:none;">✖</button></td>`; });
+            document.querySelectorAll('.vivran-textarea').forEach(el => autoResize(el));
+        }
+        function saveAnimal() {
+            const files = document.getElementById('anPhotos').files; let photos = []; let count = 0;
+            if(files.length > 0) { for(let f of files) { let reader = new FileReader(); reader.readAsDataURL(f); reader.onload = function () { photos.push(reader.result); count++; if(count === files.length) pushAnimalData(photos); }; } } else { pushAnimalData([]); }
+        }
+        function pushAnimalData(photos) {
+            animalData.push({ id: document.getElementById('anId').value, type: document.getElementById('anType').value, price: document.getElementById('anPrice').value, date: document.getElementById('anDate').value, address: document.getElementById('anAddress').value, photos: photos, medRecords: [], desc: '' });
+            localStorage.setItem('dairy_animals_v2', JSON.stringify(animalData)); renderAnimals(); document.getElementById('anId').value = ''; document.getElementById('anPrice').value = ''; document.getElementById('anAddress').value = '';
+        }
+        function updateAnimalDesc(idx, val) { animalData[idx].desc = val; localStorage.setItem('dairy_animals_v2', JSON.stringify(animalData)); }
+        function deleteAnimal(idx) { if(confirm("Delete Record?")) { animalData.splice(idx, 1); localStorage.setItem('dairy_animals_v2', JSON.stringify(animalData)); renderAnimals(); } }
+        
+        function openPhotoModal(idx) { currentAnimalIndex = idx; const grid = document.getElementById('galleryGrid'); grid.innerHTML = ''; animalData[idx].photos.forEach((src, pIdx) => { grid.innerHTML += `<div class="photo-wrapper"><img src="${src}" class="photo-thumb" onclick="openFullImage('${src}')"><button class="photo-del-btn" onclick="deletePhoto(${idx}, ${pIdx})">X</button></div>`; }); document.getElementById('photoModal').style.display = "block"; }
+        function openFullImage(src) { document.getElementById('imgPreviewFull').src = src; document.getElementById('imgPreviewModal').style.display = "flex"; }
+        function closeImgPreview(e) { if(e.target.id === 'imgPreviewModal') document.getElementById('imgPreviewModal').style.display = "none"; }
+        function toggleZoom(e) { e.stopPropagation(); e.target.classList.toggle('zoomed'); }
+        function uploadMorePhotos() { const files = document.getElementById('newPhotoUpload').files; if(currentAnimalIndex === null) return; for(let f of files) { let reader = new FileReader(); reader.readAsDataURL(f); reader.onload = function() { animalData[currentAnimalIndex].photos.push(reader.result); localStorage.setItem('dairy_animals_v2', JSON.stringify(animalData)); openPhotoModal(currentAnimalIndex); renderAnimals(); } } }
+        function deletePhoto(anIdx, pIdx) { if(confirm("Delete Photo?")) { animalData[anIdx].photos.splice(pIdx, 1); localStorage.setItem('dairy_animals_v2', JSON.stringify(animalData)); openPhotoModal(anIdx); renderAnimals(); } }
+        
+        // --- MEDICAL LOGIC ---
+        function openMedicalModal(idx) { currentAnimalIndex = idx; const today = new Date().toISOString().slice(0, 7); document.getElementById('medMonthPicker').value = today; renderMedRecords(); document.getElementById('medicalModal').style.display = "block"; }
+        function renderMedRecords() {
+            const idx = currentAnimalIndex; const an = animalData[idx]; const selectedMonth = document.getElementById('medMonthPicker').value; const tbody = document.getElementById('medicalTableBody'); tbody.innerHTML = ''; let total = 0; currentMedMapping = []; 
+            if(an.medRecords) { an.medRecords.forEach((rec, originalIdx) => { if(!rec.date) rec.date = new Date().toISOString().slice(0, 10); if(rec.date.startsWith(selectedMonth)) { currentMedMapping.push(originalIdx); let imgHtml = ''; let photos = rec.photos || (rec.photo ? [rec.photo] : []); photos.forEach(src => { imgHtml += `<img src="${src}" class="med-thumb" onclick="openFullImage('${src}')">`; }); if(photos.length > 0) imgHtml += `<br><small style="cursor:pointer; color:blue;" onclick="medAddPhoto(${originalIdx})">+ Add</small>`; else imgHtml = `<small style="cursor:pointer; color:blue;" onclick="medAddPhoto(${originalIdx})">+ Upload</small>`; tbody.innerHTML += `<tr><td>${rec.date}</td><td><textarea class="med-desc-box" oninput="autoResize(this)" onchange="updateMed(${idx},${originalIdx},'treatment',this.value)">${rec.treatment}</textarea></td><td><input type="number" value="${rec.cost}" style="width:70px" onchange="updateMed(${idx},${originalIdx},'cost',this.value)"></td><td>${imgHtml}</td><td><button onclick="deleteMed(${idx},${originalIdx})" style="color:red">X</button></td></tr>`; total += parseFloat(rec.cost) || 0; } }); } 
+            document.getElementById('medGrandTotal').innerText = total.toFixed(2); document.querySelectorAll('.med-desc-box').forEach(el => autoResize(el));
+        }
+        function addMedicalRecord() { let t = document.getElementById('medName').value, c = document.getElementById('medCost').value, files = document.getElementById('medPhoto').files, date = new Date().toISOString().slice(0, 10); if(!animalData[currentAnimalIndex].medRecords) animalData[currentAnimalIndex].medRecords=[]; let photoArray = []; let processed = 0; const saveRecord = () => { animalData[currentAnimalIndex].medRecords.push({ date: date, treatment: t, cost: c, photos: photoArray }); saveAndRefreshMed(); }; if(files.length > 0) { for(let f of files) { const reader = new FileReader(); reader.readAsDataURL(f); reader.onload = function() { photoArray.push(reader.result); processed++; if(processed === files.length) saveRecord(); }; } } else { saveRecord(); } }
+        function medAddPhoto(originalIdx) { let input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = e => { let files = e.target.files; let processed = 0; if(!animalData[currentAnimalIndex].medRecords[originalIdx].photos) { let oldP = animalData[currentAnimalIndex].medRecords[originalIdx].photo; animalData[currentAnimalIndex].medRecords[originalIdx].photos = oldP ? [oldP] : []; } for(let f of files) { let reader = new FileReader(); reader.readAsDataURL(f); reader.onload = function() { animalData[currentAnimalIndex].medRecords[originalIdx].photos.push(reader.result); processed++; if(processed === files.length) { localStorage.setItem('dairy_animals_v2', JSON.stringify(animalData)); renderMedRecords(); } } } }; input.click(); }
+        function saveAndRefreshMed() { localStorage.setItem('dairy_animals_v2', JSON.stringify(animalData)); renderMedRecords(); document.getElementById('medName').value = ''; document.getElementById('medCost').value = ''; document.getElementById('medPhoto').value = ''; }
+        function updateMed(idx, rIdx, field, val) { animalData[idx].medRecords[rIdx][field] = val; localStorage.setItem('dairy_animals_v2', JSON.stringify(animalData)); renderMedRecords(); }
+        function deleteMed(idx, rIdx) { if(confirm("Are you sure?")) { animalData[idx].medRecords.splice(rIdx, 1); localStorage.setItem('dairy_animals_v2', JSON.stringify(animalData)); renderMedRecords(); } }
+
+        // ================= TAB 3 & 4 LOGIC =================
+        function loadExpenditureData() {
+            const m = document.getElementById('expMonth').value; if(!m) return; const data = JSON.parse(localStorage.getItem('dairy_exp_' + m)) || {};
+            document.getElementById('expFeedDesc').value = data.feedDesc || ''; document.getElementById('expFeedCost').value = data.feedCost || '';
+            document.getElementById('expMedDesc').value = data.medDesc || ''; document.getElementById('expMedCost').value = data.medCost || '';
+            document.getElementById('expOtherDesc').value = data.otherDesc || ''; document.getElementById('expOtherCost').value = data.otherCost || '';
+            document.getElementById('expNewAnimalDesc').value = data.newAnimalDesc || ''; document.getElementById('expNewAnimalCost').value = data.newAnimalCost || ''; // NEW
+            document.getElementById('expSoldDesc').value = data.soldDesc || ''; document.getElementById('expSoldCost').value = data.soldCost || '';
+            
+            let autoMedTotal = 0;
+            animalData.forEach(an => { if(an.medRecords) { an.medRecords.forEach(rec => { if(rec.date && rec.date.startsWith(m)) autoMed += parseFloat(rec.cost) || 0; }); } });
+            document.getElementById('expAutoMedTotal').innerText = autoMedTotal.toFixed(2);
+
+            document.querySelectorAll('.exp-textarea').forEach(el => autoResize(el)); calculateExpenditure();
+        }
+        function saveExpenditureData() {
+            if(event.target.classList.contains('exp-textarea')) autoResize(event.target);
+            const m = document.getElementById('expMonth').value;
+            const data = { 
+                feedDesc: document.getElementById('expFeedDesc').value, feedCost: document.getElementById('expFeedCost').value, 
+                medDesc: document.getElementById('expMedDesc').value, medCost: document.getElementById('expMedCost').value, 
+                otherDesc: document.getElementById('expOtherDesc').value, otherCost: document.getElementById('expOtherCost').value, 
+                newAnimalDesc: document.getElementById('expNewAnimalDesc').value, newAnimalCost: document.getElementById('expNewAnimalCost').value, // NEW
+                soldDesc: document.getElementById('expSoldDesc').value, soldCost: document.getElementById('expSoldCost').value 
+            };
+            localStorage.setItem('dairy_exp_' + m, JSON.stringify(data)); calculateExpenditure();
+        }
+        function calculateExpenditure() {
+            const autoMed = parseFloat(document.getElementById('expAutoMedTotal').innerText) || 0;
+            const totalExp = (parseFloat(document.getElementById('expFeedCost').value)||0) + (parseFloat(document.getElementById('expMedCost').value)||0) + (parseFloat(document.getElementById('expOtherCost').value)||0) + (parseFloat(document.getElementById('expNewAnimalCost').value)||0) + autoMed;
+            const finalExp = totalExp - (parseFloat(document.getElementById('expSoldCost').value)||0);
+            document.getElementById('expTotalCalc').innerText = totalExp.toFixed(2); document.getElementById('expFinalCalc').innerText = finalExp.toFixed(2);
+        }
+        function runAnalysis() {
+            const mKey = document.getElementById('analysisMonth').value; const stored = JSON.parse(localStorage.getItem('dairy_v1_' + mKey)) || []; const daysInMonth = new Date(mKey.split('-')[0], mKey.split('-')[1], 0).getDate();
+            let dailyTotals = new Array(daysInMonth).fill(0), labels = Array.from({length: daysInMonth}, (_, i) => i + 1), totalRevenue = 0, totalPaid = 0;
+            stored.forEach(cust => { cust.dates.forEach((qty, idx) => { if(idx < daysInMonth) dailyTotals[idx] += (parseFloat(qty) || 0); }); let milk = cust.dates.reduce((a, b) => a + (parseFloat(b) || 0), 0); let amt = milk * (parseFloat(cust.price) || 0); totalRevenue += amt; totalPaid += (parseFloat(cust.paid) || 0); });
+            
+            // --- Calculate Total Expenditure from Tab 3 logic for this Analysis Month ---
+            let expData = JSON.parse(localStorage.getItem('dairy_exp_' + mKey)) || {};
+            let autoMed = 0;
+            animalData.forEach(an => { if(an.medRecords) { an.medRecords.forEach(rec => { if(rec.date && rec.date.startsWith(mKey)) autoMed += parseFloat(rec.cost) || 0; }); } });
+            let totalExp = (parseFloat(expData.feedCost)||0) + (parseFloat(expData.medCost)||0) + (parseFloat(expData.otherCost)||0) + (parseFloat(expData.newAnimalCost)||0) + autoMed;
+            let finalExp = totalExp - (parseFloat(expData.soldCost)||0);
+            let profit = totalPaid - finalExp;
+            
+            // Calculate Monthly Pending Due
+            let totalDue = totalRevenue - totalPaid;
+
+            // Update Report Boxes
+            document.getElementById('repMonthRev').innerText = '₹ ' + totalPaid.toFixed(2);
+            document.getElementById('repMonthExp').innerText = '₹ ' + finalExp.toFixed(2);
+            document.getElementById('repMonthDue').innerText = '₹ ' + totalDue.toFixed(2);
+            document.getElementById('repMonthProfit').innerHTML = `₹ ${profit.toFixed(2)} ${profit >= 0 ? '🎉' : '😞'}`;
+            document.getElementById('repMonthProfit').style.color = profit >= 0 ? '#27ae60' : '#c0392b';
+
+            if(charts.daily) charts.daily.destroy(); if(charts.money) charts.money.destroy(); if(charts.year) charts.year.destroy();
+            charts.daily = new Chart(document.getElementById('dailyMilkChart'), { type: 'line', data: { labels: labels, datasets: [{ label: 'Milk (L)', data: dailyTotals, borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.2)', fill: true }] } });
+            charts.money = new Chart(document.getElementById('monthlyMoneyChart'), { type: 'bar', data: { labels: ['Revenue', 'Paid', 'Due'], datasets: [{ label: 'Amount (₹)', data: [totalRevenue, totalPaid, totalRevenue - totalPaid], backgroundColor: ['#2ecc71', '#3498db', '#e74c3c'] }] } });
+            let yearData = calculateYearlyData(mKey.split('-')[0]); charts.year = new Chart(document.getElementById('yearlyChart'), { type: 'bar', data: { labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], datasets: [{ label: 'Revenue (₹)', data: yearData, backgroundColor: '#9b59b6' }] } });
+        }
+        function calculateYearlyData(year) { let data = []; for(let i=1; i<=12; i++) { let m = i < 10 ? '0'+i : i; let monthData = JSON.parse(localStorage.getItem(`dairy_v1_${year}-${m}`)) || []; let mTotal = 0; monthData.forEach(c => { let milk = c.dates.reduce((a, b) => a + (parseFloat(b)||0), 0); mTotal += milk * (parseFloat(c.price)||0); }); data.push(mTotal); } return data; }
+        function runYearlyDeepDive() {
+            let year = document.getElementById('yearlyAnalysisInput').value; let monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; let yearlyRev = [], yearlyExp = []; let totalYearRev = 0, totalYearExp = 0, totalYearPaid = 0;
+            for(let i=1; i<=12; i++) {
+                let m = i < 10 ? '0'+i : i; let keyDate = `${year}-${m}`;
+                let custData = JSON.parse(localStorage.getItem('dairy_v1_' + keyDate)) || [];
+                let mRev = 0; let mPaid = 0;
+                custData.forEach(c => { let milk = c.dates.reduce((a, b) => a + (parseFloat(b) || 0), 0); mRev += milk * (parseFloat(c.price) || 0); mPaid += parseFloat(c.paid) || 0; }); 
+                yearlyRev.push(mRev); totalYearRev += mRev; totalYearPaid += mPaid;
+                
+                let expData = JSON.parse(localStorage.getItem('dairy_exp_' + keyDate)) || {};
+                let autoMed = 0; animalData.forEach(an => { if(an.medRecords) { an.medRecords.forEach(rec => { if(rec.date && rec.date.startsWith(keyDate)) autoMed += parseFloat(rec.cost) || 0; }); } });
+                let cost = (parseFloat(expData.feedCost)||0) + (parseFloat(expData.medCost)||0) + (parseFloat(expData.otherCost)||0) + (parseFloat(expData.newAnimalCost)||0) + autoMed;
+                let profit = parseFloat(expData.soldCost)||0; let netExp = cost - profit; if(netExp < 0) netExp = 0; yearlyExp.push(netExp); totalYearExp += netExp;
+            }
+            // Update Yearly Summary
+            let yearNetProfit = totalYearPaid - totalYearExp;
+            let yearTotalDue = totalYearRev - totalYearPaid;
+            
+            document.getElementById('repYearRev').innerText = '₹ ' + totalYearPaid.toFixed(2);
+            document.getElementById('repYearDue').innerText = '₹ ' + yearTotalDue.toFixed(2);
+            document.getElementById('repYearProfit').innerText = '₹ ' + yearNetProfit.toFixed(2);
+
+            if(charts.pie) charts.pie.destroy(); charts.pie = new Chart(document.getElementById('annualPieChart'), { type: 'pie', data: { labels: ['Total Expenditure', 'Net Profit'], datasets: [{ data: [totalYearExp, (yearNetProfit) < 0 ? 0 : yearNetProfit], backgroundColor: ['#e74c3c', '#2ecc71'] }] } });
+            if(charts.fin) charts.fin.destroy(); charts.fin = new Chart(document.getElementById('annualFinChart'), { type: 'bar', data: { labels: monthLabels, datasets: [ { label: 'Revenue', data: yearlyRev, backgroundColor: '#2ecc71' }, { label: 'Expenditure', data: yearlyExp, backgroundColor: '#e74c3c' } ] }, options: { scales: { y: { beginAtZero: true } } } });
+        }
+
+        window.onclick = function(e) { if(e.target.classList.contains('modal')) e.target.style.display = "none"; }
+        window.onload = function() {
+            const today = new Date().toISOString().slice(0, 7); const thisYear = new Date().getFullYear();
+            document.getElementById('dataMonth').value = today; document.getElementById('analysisMonth').value = today; document.getElementById('expMonth').value = today; document.getElementById('yearlyAnalysisInput').value = thisYear;
+            const savedUpi = localStorage.getItem('dairy_shop_upi'); if(savedUpi) document.getElementById('shopUpiId').value = savedUpi;
+            loadMonthlyData(); renderAnimals(); runAnalysis(); loadExpenditureData(); runYearlyDeepDive();
+        }
+    </script>
+</body>
+</html>
